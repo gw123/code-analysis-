@@ -1,6 +1,11 @@
-package code
+package entity
 
-// Define the structure for YAML parsing
+type Step1FileInfo struct {
+	File        string
+	Why         string
+	ParseResult string
+}
+
 type FileInfo struct {
 	FileName    string   `yaml:"file_name"`
 	PackageName string   `yaml:"package_name"`

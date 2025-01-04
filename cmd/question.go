@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	code "codetest"
+	"codetest/internal/usecase"
+	"codetest/internal/usecase/web_api"
 	"fmt"
 	"github.com/spf13/cobra"
-	"log"
 	"os"
 )
 
@@ -32,24 +32,21 @@ func init() {
 	rootCmd.AddCommand(questionNodeCmd) // 将子命令添加到根命令
 	questionNodeCmd.Flags().StringVarP(&apiToken, "token", "t", "", "API token for AI analysis (required)")
 	questionNodeCmd.Flags().StringVarP(&summaryFilePath, "summary-dir", "s", "./result/all.md", "总结文件输出地方")
-
-	err := questionNodeCmd.MarkFlagRequired("token")
-	if err != nil {
-		log.Println("Error: token flag is required", err)
-		return
-	}
 }
 
 // runFileNode 主要逻辑
 func runFileNode(token, question string) error {
-	aiClient := code.NewChatGPTClient(token)
+	llmClient := web_api.NewChatGPTClient(token)
+	//codeSummaryRepo := repo.NewCodeSummaryRepo(outputDir)
+	aiCode := usecase.NewAiCode(llmClient)
+
 	summary, err := os.ReadFile(summaryFilePath)
 	if err != nil {
 		fmt.Println("os.ReadFile(path) Error:", err)
 		return err
 	}
 	// 调用 AI 客户端以获取答案
-	answer, err := aiClient.AIQuestion(string(summary), question, code.GenNodeHelpInfo()+code.GenCodeUseDocHelpInfo())
+	answer, err := aiCode.AIQuestion(string(summary), question, "")
 	if err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
