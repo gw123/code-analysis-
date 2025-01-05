@@ -23,14 +23,14 @@ var questionNodeCmd = &cobra.Command{
 		if question == "" {
 			return fmt.Errorf("question cannot be empty")
 		}
-		return runFileNode(apiToken, question)
+		return runFileNode(openAIToken, question)
 	},
 }
 
 // init 函数用于设置 file-node 命令的参数
 func init() {
 	rootCmd.AddCommand(questionNodeCmd) // 将子命令添加到根命令
-	questionNodeCmd.Flags().StringVarP(&apiToken, "token", "t", "", "API token for AI analysis (required)")
+	questionNodeCmd.Flags().StringVarP(&openAIToken, "token", "t", "", "API token for AI analysis (required)")
 	questionNodeCmd.Flags().StringVarP(&summaryFilePath, "summary-dir", "s", "./result/all.md", "总结文件输出地方")
 }
 
@@ -38,7 +38,7 @@ func init() {
 func runFileNode(token, question string) error {
 	llmClient := web_api.NewChatGPTClient(token)
 	//codeSummaryRepo := repo.NewCodeSummaryRepo(outputDir)
-	aiCode := usecase.NewAiCode(llmClient)
+	aiCode := usecase.NewAiCode(llmClient, nil)
 
 	summary, err := os.ReadFile(summaryFilePath)
 	if err != nil {

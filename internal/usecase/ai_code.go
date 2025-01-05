@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"codetest/internal/entity"
+	"context"
 	"fmt"
 	"gopkg.in/yaml.v3"
 	"os"
@@ -11,13 +12,17 @@ import (
 
 // aiCodeUseCase 处理与 AI 相关的用例
 type aiCodeUseCase struct {
-	client LLMClient
-	logger Logger
+	client    LLMClient
+	logger    Logger
+	apiClient ApiClient
 }
 
 // NewAiCode 创建新的 aiCodeUseCase
-func NewAiCode(client LLMClient) AICodeUseCase {
-	return &aiCodeUseCase{client: client}
+func NewAiCode(client LLMClient, apiClient ApiClient) AICodeUseCase {
+	return &aiCodeUseCase{
+		client:    client,
+		apiClient: apiClient,
+	}
 }
 
 // AIAnalysisCode 进行代码分析
@@ -148,4 +153,13 @@ func summarizeFinalAnswer(client LLMClient, question, helpInfo string, fileInfos
 
 	fmt.Println(response)
 	return nil, nil
+}
+
+func (uc *aiCodeUseCase) UploadCodeInfo(ctx context.Context, data entity.AICodeSnippet) error {
+	info, err := uc.apiClient.UploadCodeInfo(ctx, data)
+	if err != nil {
+		return err
+	}
+	fmt.Println(info)
+	return nil
 }

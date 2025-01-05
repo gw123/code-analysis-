@@ -36,7 +36,7 @@ func (r *CodeSummary) UpdateSummaryFile(projectName, path string, yamlResult *en
 	var strBuilder strings.Builder
 
 	strBuilder.WriteString(fmt.Sprintf("文件名: %s\n", path))
-	strBuilder.WriteString(fmt.Sprintf("功能: %s\n", yamlResult.FunctionDescription))
+	strBuilder.WriteString(fmt.Sprintf("功能: %s\n", yamlResult.FileDescription))
 	strBuilder.WriteString(fmt.Sprintf("包名: %s\n", yamlResult.FileInfo.PackageName))
 	strBuilder.WriteString("依赖导入项目: ")
 	strBuilder.WriteString(strings.Join(yamlResult.FileInfo.Imports, ","))

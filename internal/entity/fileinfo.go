@@ -32,8 +32,8 @@ type Struct struct {
 }
 
 type ParsedYAML struct {
-	FunctionDescription string   `yaml:"file_description"`
-	FileInfo            FileInfo `yaml:"file_info"`
+	FileDescription string   `yaml:"file_description"`
+	FileInfo        FileInfo `yaml:"file_info"`
 	//Constants           []Constant `yaml:"constants"`
 	//Structs             []Struct   `yaml:"structs"`
 	//Methods             []Method   `yaml:"methods"`
