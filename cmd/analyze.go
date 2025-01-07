@@ -24,12 +24,14 @@ var (
 	openAIToken     string
 	outputDir       string
 	projectName     string
+	projectID       int
 	language        string
 	languageVersion string
 	username        string
 	password        string
 	apiBasePath     string
 	configFile      string // 新增：配置文件路径
+
 )
 
 // Config 配置结构体，用于映射 YAML 文件
@@ -43,6 +45,7 @@ type Config struct {
 	OutputDir       string `yaml:"output_dir"`
 	OpenAIToken     string `yaml:"openai_token"`
 	Dir             string `yaml:"dir"`
+	ProjectID       int    `yaml:"project_id"`
 }
 
 // analyzeCmd 定义了分析命令
@@ -77,6 +80,7 @@ func init() {
 
 	// 新增的参数
 	analyzeCmd.Flags().StringVarP(&projectName, "project-name", "p", "", "Project name (required)")
+	analyzeCmd.Flags().IntVarP(&projectID, "project-id", "i", 0, "Project ID (required)")
 	analyzeCmd.Flags().StringVarP(&language, "language", "l", "", "Programming language (required)")
 	analyzeCmd.Flags().StringVarP(&languageVersion, "language-version", "v", "", "Programming language version (required)")
 	analyzeCmd.Flags().StringVarP(&username, "username", "u", "", "Username for authentication (required)")
@@ -132,6 +136,10 @@ func loadConfig(configFile string) error {
 		dir = config.Dir
 	}
 
+	if projectID == 0 {
+		projectID = config.ProjectID
+	}
+
 	return nil
 }
 
@@ -156,6 +164,28 @@ func run(directory, token string) error {
 			count++
 		}
 	})
+
+	// 上报项目的汇总信息
+	{
+		// 获取项目详情
+		project, err := apiClient.GetProjectByID(context.Background(), uint(projectID))
+		if err != nil {
+			log.Printf("Failed to get project details: %v\n", err)
+			return err
+		}
+		summaryFilePath := filepath.Join(outputDir, "summary.md")
+		summary, err := os.ReadFile(summaryFilePath)
+		if err != nil {
+			log.Printf("Failed to read summary file: %v\n", err)
+			return err
+		}
+
+		project.Desc = string(summary)
+		if err := apiClient.UpdateProject(context.Background(), project); err != nil {
+			log.Printf("Failed to update project: %v\n", err)
+			return err
+		}
+	}
 
 	if err != nil {
 		log.Printf("Error during directory traversal: %v\n", err)

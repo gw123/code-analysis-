@@ -43,7 +43,7 @@ func (r *CodeSummary) UpdateSummaryFile(projectName, path string, yamlResult *en
 	strBuilder.WriteString("\n---\n")
 
 	// 追加写入总结文件
-	summaryFilePath := filepath.Join(r.OutputDir, "all.md")
+	summaryFilePath := filepath.Join(r.OutputDir, "summary.md")
 	file, err := os.OpenFile(summaryFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open summary file: %v", err)

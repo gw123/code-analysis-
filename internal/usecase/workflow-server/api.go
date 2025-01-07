@@ -1,13 +1,11 @@
 package workflow_server
 
 import (
-	"bytes"
 	"codetest/internal/entity"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"github.com/go-resty/resty/v2"
+	"time"
 )
 
 type LoginRequest struct {
@@ -28,9 +26,32 @@ type ErrorResponse struct {
 	Error string `json:"message"`
 }
 
+type Response struct {
+	Code    int         `json:"code"`
+	CodeEn  string      `json:"code_en"`
+	Doc     string      `json:"doc,omitempty"`
+	Message string      `json:"message,omitempty"`
+	Data    interface{} `json:"data"`
+}
+
+// Project represents the project entity.
+type Project struct {
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	Name            string    `gorm:"uniqueIndex;not null" json:"name"`
+	Tags            []string  `gorm:"type:varchar[];default:NULL" json:"tags"`               // 标签 (使用 pq.StringArray 来支持 PostgreSQL 的数组类型)
+	GitUrl          string    `gorm:"type:varchar(1024);not null" json:"git_url"`            // 代码地址
+	Desc            string    `gorm:"type:varchar(4096);default:NULL" json:"desc"`           // 描述信息
+	Language        string    `gorm:"type:varchar(64);not null" json:"language"`             // 编程语言
+	LanguageVersion string    `gorm:"type:varchar(32);default:NULL" json:"language_version"` // 语言版本
+	UserID          uint      `gorm:"default:NULL" json:"user_id"`                           // 用户 ID (可以为 NULL
+	Status          string    `json:"status"`                                                // 状态
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 // ApiClient 封装 API 客户端
 type ApiClient struct {
-	client      *http.Client
+	client      *resty.Client
 	apiBasePath string
 	token       string
 	username    string
@@ -40,99 +61,81 @@ type ApiClient struct {
 // NewApiClient 创建一个新的 ApiClient
 func NewApiClient(apiBasePath, username, password string) *ApiClient {
 	return &ApiClient{
-		client:      &http.Client{},
-		apiBasePath: apiBasePath,
-		username:    username,
-		password:    password,
+		client: resty.New().SetBaseURL(apiBasePath + "/api/v1/"),
+		//apiBasePath: apiBasePath + "/api/v1/",
+		username: username,
+		password: password,
 	}
 }
 
-// Login 进行登录并获取 token
 func (a *ApiClient) Login(ctx context.Context) (string, error) {
-	loginReq := LoginRequest{
-		Username: a.username,
-		Password: a.password,
-	}
-
-	// 将请求体转换为 JSON
-	jsonData, err := json.Marshal(loginReq)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal login request body: %v", err)
-	}
-
-	// 创建新的 HTTP 请求
-	req, err := http.NewRequest("POST", a.apiBasePath+"/auth/login", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create login request: %v", err)
-	}
-
-	// 设置请求头
-	req.Header.Set("Content-Type", "application/json")
-
-	// 发送登录请求
-	resp, err := a.client.Do(req)
+	var response LoginResponse
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetBody(LoginRequest{Username: a.username, Password: a.password}).
+		SetResult(&response).
+		Post("/auth/login")
 	if err != nil {
 		return "", fmt.Errorf("failed to send login request: %v", err)
 	}
-	defer resp.Body.Close()
-
-	// 读取响应体
-	bodyText, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read login response body: %v", err)
+	if resp.IsError() {
+		return "", fmt.Errorf("login failed: %s", resp.String())
 	}
 
-	// 如果返回的 HTTP 状态码不是 200，表示登录失败
-	if resp.StatusCode != http.StatusOK {
-		var errResp ErrorResponse
-		if err := json.Unmarshal(bodyText, &errResp); err != nil {
-			return "", fmt.Errorf("failed to parse error response: %v", err)
-		}
-		return "", fmt.Errorf("login failed: %s", errResp.Error)
-	}
-
-	// 解析登录成功的响应
-	var loginResp LoginResponse
-	if err := json.Unmarshal(bodyText, &loginResp); err != nil {
-		return "", fmt.Errorf("failed to parse login response: %v", err)
-	}
-
-	// 返回 Token
-	a.token = loginResp.Data.Token
-	fmt.Println("Login successful. Token:", loginResp.Data.Token)
-	return loginResp.Data.Token, nil
+	a.token = response.Data.Token
+	return response.Data.Token, nil
 }
 
-// CreateAiCode 发送 POST 请求
 func (a *ApiClient) UploadCodeInfo(ctx context.Context, data entity.AICodeSnippet) (string, error) {
-	// 将请求体数据转换为 JSON
-	jsonData, err := json.Marshal(data)
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetAuthToken(a.token).
+		SetBody(data).
+		Post("/codes")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request body: %v", err)
+		return "", fmt.Errorf("failed to send upload request: %v", err)
+	}
+	if resp.IsError() {
+		return "", fmt.Errorf("upload failed: %s", resp.String())
 	}
 
-	// 创建新的 HTTP 请求
-	req, err := http.NewRequest("POST", a.apiBasePath+"/codes", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
+	return resp.String(), nil
+}
+
+func (a *ApiClient) GetProjectByID(ctx context.Context, projectID uint) (*Project, error) {
+	url := fmt.Sprintf("%s/projects/%d", a.apiBasePath, projectID)
+	var response struct {
+		Data    Project `json:"data"`
+		Message string  `json:"message"`
 	}
-
-	// 设置请求头
-	req.Header.Set("Authorization", "Bearer "+a.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	// 发送请求
-	resp, err := a.client.Do(req)
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetAuthToken(a.token).
+		SetResult(&response).
+		Get(url)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %v", err)
+		return nil, err
 	}
-	defer resp.Body.Close()
+	if resp.IsError() {
+		return nil, fmt.Errorf("failed to fetch project: %s", resp.String())
+	}
+	return &response.Data, nil
+}
 
-	// 读取响应体
-	bodyText, err := io.ReadAll(resp.Body)
+func (a *ApiClient) UpdateProject(ctx context.Context, project *Project) error {
+	url := fmt.Sprintf("/projects/%d", project.ID)
+	response := Response{}
+	resp, err := a.client.R().
+		SetContext(ctx).
+		SetAuthToken(a.token).
+		SetBody(project).
+		SetResult(&response).
+		Put(url)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %v", err)
+		return err
 	}
-
-	return string(bodyText), nil
+	if resp.IsError() {
+		return fmt.Errorf("failed to update project: %s", response.Message)
+	}
+	return nil
 }
